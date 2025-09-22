@@ -6,21 +6,24 @@ from fit_tool.fit_file_builder import FitFileBuilder
 from fit_tool.profile.messages.file_id_message import FileIdMessage
 from fit_tool.profile.messages.workout_message import WorkoutMessage
 from fit_tool.profile.messages.workout_step_message import WorkoutStepMessage
-from fit_tool.profile.messages.file_creator_message import FileCreatorMessage
-from fit_tool.profile.profile_type import Sport, Intensity, WorkoutStepDuration, WorkoutStepTarget, Manufacturer, FileType
+from fit_tool.profile.profile_type import Sport, Intensity, WorkoutStepDuration, WorkoutStepTarget, Manufacturer, FileType, WorkoutCapabilities
 
 
 class zwoToFitConverter:
-    def __init__(self, ftp_watts=250, use_power_for_cycling=True):
+    def __init__(self, ftp_watts=240, use_power_for_cycling=True, power_buffer_percent=5, use_absolute_power=True):
         """
         Initialize converter
         
         Args:
             ftp_watts: Your FTP in watts (used to convert percentages to absolute power)
             use_power_for_cycling: If True, use power targets for cycling workouts
+            power_buffer_percent: Buffer percentage to apply (e.g., 5 for ±5%)
+            use_absolute_power: If True, use absolute watts; if False, use FTP percentages
         """
         self.ftp_watts = ftp_watts
         self.use_power_for_cycling = use_power_for_cycling
+        self.power_buffer_percent = power_buffer_percent / 100.0  # Convert to decimal
+        self.use_absolute_power = use_absolute_power
         
         # Mapping zwo sport types to FIT sport types
         self.sport_mapping = {
@@ -48,6 +51,24 @@ class zwoToFitConverter:
             1.15: 5,  # Neuromuscular
             1.20: 5   # Neuromuscular
         }
+
+    def _convert_power_for_fit(self, watts):
+        """
+        Convert power value for FIT file format
+        
+        Args:
+            watts: Power in watts
+            
+        Returns:
+            Power value formatted for FIT file
+        """
+        if self.use_absolute_power:
+            # For absolute watts: add 1000 offset as per FIT specification
+            return int(watts + 1000)
+        else:
+            # For FTP percentage: convert watts to percentage of FTP (0-1000 range)
+            ftp_percentage = (watts / self.ftp_watts) * 100
+            return int(round(ftp_percentage * 10))  # Scale to 0-1000 range
 
     def parse_zwo_file(self, zwo_file_path):
         """Parse zwo file and extract workout information"""
@@ -100,6 +121,18 @@ class zwoToFitConverter:
         """Determine if we should use power targets for this sport"""
         return self.use_power_for_cycling and sport in ['bike', 'cycling']
 
+    def _apply_power_buffer_watts(self, power_percentage):
+        """Convert power percentage to absolute watts and apply buffer"""
+        # Convert percentage to absolute watts
+        target_watts = power_percentage * self.ftp_watts
+        
+        # Apply buffer
+        low_watts = target_watts * (1 - self.power_buffer_percent)
+        high_watts = target_watts * (1 + self.power_buffer_percent)
+        
+        # Round to integers
+        return int(round(low_watts)), int(round(high_watts))
+
     def _parse_warmup(self, element, sport='bike'):
         """Parse warmup step"""
         duration = int(element.get('Duration', 600))  # Duration in seconds
@@ -107,19 +140,28 @@ class zwoToFitConverter:
         power_high = float(element.get('PowerHigh', 0.70))
         
         if self._should_use_power(sport):
-            # Use power targets for cycling
-            power_low_watts = int(power_low * self.ftp_watts)
-            power_high_watts = int(power_high * self.ftp_watts)
+            # Convert to absolute watts with buffer
+            if power_low == power_high:
+                # Single power value, apply buffer
+                power_low_watts, power_high_watts = self._apply_power_buffer_watts(power_low)
+            else:
+                # Range provided, convert each to watts and apply individual buffers
+                power_low_watts, _ = self._apply_power_buffer_watts(power_low)
+                _, power_high_watts = self._apply_power_buffer_watts(power_high)
+            
+            # Convert to FIT format
+            fit_power_low = self._convert_power_for_fit(power_low_watts)
+            fit_power_high = self._convert_power_for_fit(power_high_watts)
             
             return {
-                'wkt_step_name': 'Warmup',
+                'wkt_step_name': 'Warm up',
                 'intensity': Intensity.WARMUP,
                 'duration_type': WorkoutStepDuration.TIME,
-                'duration_value': duration * 1000,  # Convert to milliseconds for FIT
+                'duration_value': duration * 1000,
                 'target_type': WorkoutStepTarget.POWER,
-                'target_value': (power_low_watts + power_high_watts) // 2,
-                'custom_target_value_low': power_low_watts,
-                'custom_target_value_high': power_high_watts
+                'target_value': 0,  # Set to 0 when using custom ranges
+                'custom_target_value_low': fit_power_low,
+                'custom_target_value_high': fit_power_high
             }
         else:
             # Use heart rate zones (original behavior)
@@ -127,7 +169,7 @@ class zwoToFitConverter:
             hr_zone = self._power_to_heart_rate_zone(avg_power)
             
             return {
-                'wkt_step_name': 'Warmup',
+                'wkt_step_name': 'Warm up',
                 'intensity': Intensity.WARMUP,
                 'duration_type': WorkoutStepDuration.TIME,
                 'duration_value': duration * 1000,
@@ -142,19 +184,28 @@ class zwoToFitConverter:
         power_high = float(element.get('PowerHigh', 0.65))
         
         if self._should_use_power(sport):
-            # Use power targets for cycling
-            power_low_watts = int(power_low * self.ftp_watts)
-            power_high_watts = int(power_high * self.ftp_watts)
+            # Convert to absolute watts with buffer
+            if power_low == power_high:
+                # Single power value, apply buffer
+                power_low_watts, power_high_watts = self._apply_power_buffer_watts(power_low)
+            else:
+                # Range provided, convert each to watts and apply individual buffers
+                power_low_watts, _ = self._apply_power_buffer_watts(power_low)
+                _, power_high_watts = self._apply_power_buffer_watts(power_high)
+            
+            # Convert to FIT format
+            fit_power_low = self._convert_power_for_fit(power_low_watts)
+            fit_power_high = self._convert_power_for_fit(power_high_watts)
             
             return {
-                'wkt_step_name': 'Cooldown',
+                'wkt_step_name': 'Cool down',
                 'intensity': Intensity.COOLDOWN,
                 'duration_type': WorkoutStepDuration.TIME,
                 'duration_value': duration * 1000,
                 'target_type': WorkoutStepTarget.POWER,
-                'target_value': (power_low_watts + power_high_watts) // 2,
-                'custom_target_value_low': power_low_watts,
-                'custom_target_value_high': power_high_watts
+                'target_value': 0,  # Set to 0 when using custom ranges
+                'custom_target_value_low': fit_power_low,
+                'custom_target_value_high': fit_power_high
             }
         else:
             # Use heart rate zones
@@ -162,7 +213,7 @@ class zwoToFitConverter:
             hr_zone = self._power_to_heart_rate_zone(avg_power)
             
             return {
-                'wkt_step_name': 'Cooldown',
+                'wkt_step_name': 'Cool down',
                 'intensity': Intensity.COOLDOWN,
                 'duration_type': WorkoutStepDuration.TIME,
                 'duration_value': duration * 1000,
@@ -183,16 +234,22 @@ class zwoToFitConverter:
         for i in range(repeat):
             # Work interval
             if self._should_use_power(sport):
-                on_power_watts = int(on_power * self.ftp_watts)
+                # Apply buffer to work interval
+                on_power_low_watts, on_power_high_watts = self._apply_power_buffer_watts(on_power)
+                
+                # Convert to FIT format
+                fit_on_power_low = self._convert_power_for_fit(on_power_low_watts)
+                fit_on_power_high = self._convert_power_for_fit(on_power_high_watts)
+                
                 work_step = {
                     'wkt_step_name': f'Interval {i+1} - Work',
                     'intensity': Intensity.ACTIVE,
                     'duration_type': WorkoutStepDuration.TIME,
                     'duration_value': on_duration * 1000,
                     'target_type': WorkoutStepTarget.POWER,
-                    'target_value': on_power_watts,
-                    'custom_target_value_low': on_power_watts,
-                    'custom_target_value_high': on_power_watts
+                    'target_value': 0,  # Set to 0 when using custom ranges
+                    'custom_target_value_low': fit_on_power_low,
+                    'custom_target_value_high': fit_on_power_high
                 }
             else:
                 on_hr_zone = self._power_to_heart_rate_zone(on_power)
@@ -209,16 +266,22 @@ class zwoToFitConverter:
             # Recovery interval (only add if not the last repeat)
             if i < repeat - 1:
                 if self._should_use_power(sport):
-                    off_power_watts = int(off_power * self.ftp_watts)
+                    # Apply buffer to recovery interval
+                    off_power_low_watts, off_power_high_watts = self._apply_power_buffer_watts(off_power)
+                    
+                    # Convert to FIT format
+                    fit_off_power_low = self._convert_power_for_fit(off_power_low_watts)
+                    fit_off_power_high = self._convert_power_for_fit(off_power_high_watts)
+                    
                     recovery_step = {
                         'wkt_step_name': f'Interval {i+1} - Recovery',
                         'intensity': Intensity.REST,
                         'duration_type': WorkoutStepDuration.TIME,
                         'duration_value': off_duration * 1000,
                         'target_type': WorkoutStepTarget.POWER,
-                        'target_value': off_power_watts,
-                        'custom_target_value_low': off_power_watts,
-                        'custom_target_value_high': off_power_watts
+                        'target_value': 0,  # Set to 0 when using custom ranges
+                        'custom_target_value_low': fit_off_power_low,
+                        'custom_target_value_high': fit_off_power_high
                     }
                 else:
                     off_hr_zone = self._power_to_heart_rate_zone(off_power)
@@ -240,25 +303,29 @@ class zwoToFitConverter:
         power = float(element.get('Power', 0.75))
         
         if self._should_use_power(sport):
-            # Use power targets for cycling
-            power_watts = int(power * self.ftp_watts)
+            # Apply buffer to steady state power
+            power_low_watts, power_high_watts = self._apply_power_buffer_watts(power)
+            
+            # Convert to FIT format
+            fit_power_low = self._convert_power_for_fit(power_low_watts)
+            fit_power_high = self._convert_power_for_fit(power_high_watts)
             
             return {
-                'wkt_step_name': f'Steady State ({int(power*100)}% FTP)',
+                'wkt_step_name': 'Steady state',
                 'intensity': Intensity.ACTIVE,
                 'duration_type': WorkoutStepDuration.TIME,
                 'duration_value': duration * 1000,
                 'target_type': WorkoutStepTarget.POWER,
-                'target_value': power_watts,
-                'custom_target_value_low': power_watts,
-                'custom_target_value_high': power_watts
+                'target_value': 0,  # Set to 0 when using custom ranges
+                'custom_target_value_low': fit_power_low,
+                'custom_target_value_high': fit_power_high
             }
         else:
             # Use heart rate zones
             hr_zone = self._power_to_heart_rate_zone(power)
             
             return {
-                'wkt_step_name': 'Steady State',
+                'wkt_step_name': 'Steady state',
                 'intensity': Intensity.ACTIVE,
                 'duration_type': WorkoutStepDuration.TIME,
                 'duration_value': duration * 1000,
@@ -283,12 +350,7 @@ class zwoToFitConverter:
         file_id_message.time_created = round(datetime.datetime.now().timestamp() * 1000)
         file_id_message.serial_number = 0x12345678
 
-        # Create file creator message
-        file_creator_message = FileCreatorMessage()
-        file_creator_message.hardware_version = 0
-        file_creator_message.software_version = 0
-
-        # Create workout steps using only allowed fields
+        # Create workout steps - ensure every step has wkt_step_name
         workout_steps = []
         for i, step_data in enumerate(workout_data['steps']):
             step = WorkoutStepMessage()
@@ -296,9 +358,8 @@ class zwoToFitConverter:
             # REQUIRED: Set message index
             step.message_index = i
             
-            # OPTIONAL: Set step name
-            if 'wkt_step_name' in step_data:
-                step.wkt_step_name = step_data['wkt_step_name']
+            # REQUIRED: Set step name - ensure it's always present
+            step.wkt_step_name = step_data.get('wkt_step_name', f'Step {i+1}')
             
             # REQUIRED: Set duration type
             step.duration_type = step_data['duration_type']
@@ -309,9 +370,8 @@ class zwoToFitConverter:
             # REQUIRED: Set target type
             step.target_type = step_data['target_type']
             
-            # OPTIONAL: Set target value
-            if 'target_value' in step_data:
-                step.target_value = step_data['target_value']
+            # REQUIRED: Set target value (0 for custom ranges, actual value for single targets)
+            step.target_value = step_data['target_value']
             
             # OPTIONAL: Set custom target range
             if 'custom_target_value_low' in step_data:
@@ -334,16 +394,16 @@ class zwoToFitConverter:
             
             workout_steps.append(step)
 
-        # Create workout message
+        # Create workout message with wkt_name
         workout_message = WorkoutMessage()
-        workout_message.wkt_name = workout_data['name']
+        workout_message.wkt_name = workout_data['name']  # Add workout name
         workout_message.sport = self.sport_mapping.get(workout_data['sport'], Sport.GENERIC)
+        workout_message.capabilities = WorkoutCapabilities.TCX  # Add TCX capability
         workout_message.num_valid_steps = len(workout_steps)
 
-        # Build FIT file
+        # Build FIT file (removed file_creator_message)
         builder = FitFileBuilder(auto_define=True, min_string_size=50)
         builder.add(file_id_message)
-        builder.add(file_creator_message)
         builder.add(workout_message)
         builder.add_all(workout_steps)
 
@@ -354,6 +414,7 @@ class zwoToFitConverter:
         print(f"Workout: {workout_data['name']}")
         print(f"Sport: {workout_data['sport']}")
         print(f"Total steps: {len(workout_steps)}")
+        print(f"Power format: {'Absolute watts' if self.use_absolute_power else 'FTP percentage'}")
         
         # Print detailed step information
         for i, step_data in enumerate(workout_data['steps'], 1):
@@ -362,9 +423,26 @@ class zwoToFitConverter:
             
             if step_data['target_type'] == WorkoutStepTarget.POWER:
                 if 'custom_target_value_low' in step_data and 'custom_target_value_high' in step_data:
-                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {step_data['custom_target_value_low']}-{step_data['custom_target_value_high']}W")
+                    # Convert back from FIT format for display
+                    if self.use_absolute_power:
+                        low_watts = step_data['custom_target_value_low'] - 1000
+                        high_watts = step_data['custom_target_value_high'] - 1000
+                    else:
+                        low_watts = (step_data['custom_target_value_low'] / 10) * self.ftp_watts / 100
+                        high_watts = (step_data['custom_target_value_high'] / 10) * self.ftp_watts / 100
+                    
+                    low_pct = (low_watts / self.ftp_watts) * 100
+                    high_pct = (high_watts / self.ftp_watts) * 100
+                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {low_watts:.0f}-{high_watts:.0f}W ({low_pct:.0f}%-{high_pct:.0f}% FTP)")
                 else:
-                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {step_data['target_value']}W")
+                    watts = step_data['target_value']
+                    if self.use_absolute_power and watts > 1000:
+                        watts -= 1000
+                    elif not self.use_absolute_power:
+                        watts = (watts / 10) * self.ftp_watts / 100
+                    
+                    pct = (watts / self.ftp_watts) * 100
+                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {watts:.0f}W ({pct:.0f}% FTP)")
             else:
                 print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - HR Zone {step_data['target_value']}")
 
@@ -430,11 +508,12 @@ class zwoToFitConverter:
 
 
 def main():
-    # Initialize converter with your FTP in watts
-    # Set your actual FTP here!
+    # Initialize converter with your FTP in watts and 5% buffer
     converter = zwoToFitConverter(
-        ftp_watts=240,  # Replace with your actual FTP
-        use_power_for_cycling=True
+        ftp_watts=240,  # Your actual FTP
+        use_power_for_cycling=True,
+        power_buffer_percent=5,  # ±5% buffer on all power targets
+        use_absolute_power=True  # Set to True for absolute watts, False for FTP percentages
     )
     
     # Define source and destination folders
