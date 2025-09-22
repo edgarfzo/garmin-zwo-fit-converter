@@ -10,7 +10,8 @@ from fit_tool.profile.profile_type import Sport, Intensity, WorkoutStepDuration,
 
 
 class zwoToFitConverter:
-    def __init__(self, ftp_watts=240, use_power_for_cycling=True, power_buffer_percent=5, use_absolute_power=True):
+    def __init__(self, ftp_watts=240, use_power_for_cycling=True, power_buffer_percent=5, use_absolute_power=True, 
+                 warmup_manual_advance=True, cooldown_manual_advance=False):
         """
         Initialize converter
         
@@ -19,11 +20,15 @@ class zwoToFitConverter:
             use_power_for_cycling: If True, use power targets for cycling workouts
             power_buffer_percent: Buffer percentage to apply (e.g., 5 for ±5%)
             use_absolute_power: If True, use absolute watts; if False, use FTP percentages
+            warmup_manual_advance: If True, warmup steps require manual lap button press to advance
+            cooldown_manual_advance: If True, cooldown steps require manual lap button press to advance
         """
         self.ftp_watts = ftp_watts
         self.use_power_for_cycling = use_power_for_cycling
         self.power_buffer_percent = power_buffer_percent / 100.0  # Convert to decimal
         self.use_absolute_power = use_absolute_power
+        self.warmup_manual_advance = warmup_manual_advance
+        self.cooldown_manual_advance = cooldown_manual_advance
         
         # Mapping zwo sport types to FIT sport types
         self.sport_mapping = {
@@ -139,49 +144,15 @@ class zwoToFitConverter:
         power_low = float(element.get('PowerLow', 0.60))
         power_high = float(element.get('PowerHigh', 0.70))
         
-        if self._should_use_power(sport):
-            # Convert to absolute watts with buffer
-            if power_low == power_high:
-                # Single power value, apply buffer
-                power_low_watts, power_high_watts = self._apply_power_buffer_watts(power_low)
-            else:
-                # Range provided, convert each to watts and apply individual buffers
-                power_low_watts, _ = self._apply_power_buffer_watts(power_low)
-                _, power_high_watts = self._apply_power_buffer_watts(power_high)
-            
-            # Convert to FIT format
-            fit_power_low = self._convert_power_for_fit(power_low_watts)
-            fit_power_high = self._convert_power_for_fit(power_high_watts)
-            
-            return {
-                'wkt_step_name': 'Warm up',
-                'intensity': Intensity.WARMUP,
-                'duration_type': WorkoutStepDuration.TIME,
-                'duration_value': duration * 1000,
-                'target_type': WorkoutStepTarget.POWER,
-                'target_value': 0,  # Set to 0 when using custom ranges
-                'custom_target_value_low': fit_power_low,
-                'custom_target_value_high': fit_power_high
-            }
+        # Determine duration type based on manual advance setting
+        if self.warmup_manual_advance:
+            duration_type = WorkoutStepDuration.OPEN
+            duration_value = 0  # Not used for open duration
+            step_name = 'Warm up (Press LAP when ready)'
         else:
-            # Use heart rate zones (original behavior)
-            avg_power = (power_low + power_high) / 2
-            hr_zone = self._power_to_heart_rate_zone(avg_power)
-            
-            return {
-                'wkt_step_name': 'Warm up',
-                'intensity': Intensity.WARMUP,
-                'duration_type': WorkoutStepDuration.TIME,
-                'duration_value': duration * 1000,
-                'target_type': WorkoutStepTarget.HEART_RATE,
-                'target_value': hr_zone
-            }
-
-    def _parse_cooldown(self, element, sport='bike'):
-        """Parse cooldown step"""
-        duration = int(element.get('Duration', 600))  # Duration in seconds
-        power_low = float(element.get('PowerLow', 0.60))
-        power_high = float(element.get('PowerHigh', 0.65))
+            duration_type = WorkoutStepDuration.TIME
+            duration_value = duration * 1000
+            step_name = 'Warm up'
         
         if self._should_use_power(sport):
             # Convert to absolute watts with buffer
@@ -198,10 +169,64 @@ class zwoToFitConverter:
             fit_power_high = self._convert_power_for_fit(power_high_watts)
             
             return {
-                'wkt_step_name': 'Cool down',
+                'wkt_step_name': step_name,
+                'intensity': Intensity.WARMUP,
+                'duration_type': duration_type,
+                'duration_value': duration_value,
+                'target_type': WorkoutStepTarget.POWER,
+                'target_value': 0,  # Set to 0 when using custom ranges
+                'custom_target_value_low': fit_power_low,
+                'custom_target_value_high': fit_power_high
+            }
+        else:
+            # Use heart rate zones (original behavior)
+            avg_power = (power_low + power_high) / 2
+            hr_zone = self._power_to_heart_rate_zone(avg_power)
+            
+            return {
+                'wkt_step_name': step_name,
+                'intensity': Intensity.WARMUP,
+                'duration_type': duration_type,
+                'duration_value': duration_value,
+                'target_type': WorkoutStepTarget.HEART_RATE,
+                'target_value': hr_zone
+            }
+
+    def _parse_cooldown(self, element, sport='bike'):
+        """Parse cooldown step"""
+        duration = int(element.get('Duration', 600))  # Duration in seconds
+        power_low = float(element.get('PowerLow', 0.60))
+        power_high = float(element.get('PowerHigh', 0.65))
+        
+        # Determine duration type based on manual advance setting
+        if self.cooldown_manual_advance:
+            duration_type = WorkoutStepDuration.OPEN
+            duration_value = 0  # Not used for open duration
+            step_name = 'Cool down (Press LAP when ready)'
+        else:
+            duration_type = WorkoutStepDuration.TIME
+            duration_value = duration * 1000
+            step_name = 'Cool down'
+        
+        if self._should_use_power(sport):
+            # Convert to absolute watts with buffer
+            if power_low == power_high:
+                # Single power value, apply buffer
+                power_low_watts, power_high_watts = self._apply_power_buffer_watts(power_low)
+            else:
+                # Range provided, convert each to watts and apply individual buffers
+                power_low_watts, _ = self._apply_power_buffer_watts(power_low)
+                _, power_high_watts = self._apply_power_buffer_watts(power_high)
+            
+            # Convert to FIT format
+            fit_power_low = self._convert_power_for_fit(power_low_watts)
+            fit_power_high = self._convert_power_for_fit(power_high_watts)
+            
+            return {
+                'wkt_step_name': step_name,
                 'intensity': Intensity.COOLDOWN,
-                'duration_type': WorkoutStepDuration.TIME,
-                'duration_value': duration * 1000,
+                'duration_type': duration_type,
+                'duration_value': duration_value,
                 'target_type': WorkoutStepTarget.POWER,
                 'target_value': 0,  # Set to 0 when using custom ranges
                 'custom_target_value_low': fit_power_low,
@@ -213,10 +238,10 @@ class zwoToFitConverter:
             hr_zone = self._power_to_heart_rate_zone(avg_power)
             
             return {
-                'wkt_step_name': 'Cool down',
+                'wkt_step_name': step_name,
                 'intensity': Intensity.COOLDOWN,
-                'duration_type': WorkoutStepDuration.TIME,
-                'duration_value': duration * 1000,
+                'duration_type': duration_type,
+                'duration_value': duration_value,
                 'target_type': WorkoutStepTarget.HEART_RATE,
                 'target_value': hr_zone
             }
@@ -415,11 +440,17 @@ class zwoToFitConverter:
         print(f"Sport: {workout_data['sport']}")
         print(f"Total steps: {len(workout_steps)}")
         print(f"Power format: {'Absolute watts' if self.use_absolute_power else 'FTP percentage'}")
+        print(f"Warmup manual advance: {'Enabled' if self.warmup_manual_advance else 'Disabled'}")
+        print(f"Cooldown manual advance: {'Enabled' if self.cooldown_manual_advance else 'Disabled'}")
         
         # Print detailed step information
         for i, step_data in enumerate(workout_data['steps'], 1):
-            duration_seconds = step_data['duration_value'] / 1000
-            duration_minutes = duration_seconds / 60
+            if step_data['duration_type'] == WorkoutStepDuration.OPEN:
+                duration_text = "Manual LAP"
+            else:
+                duration_seconds = step_data['duration_value'] / 1000
+                duration_minutes = duration_seconds / 60
+                duration_text = f"{duration_minutes:.1f}min"
             
             if step_data['target_type'] == WorkoutStepTarget.POWER:
                 if 'custom_target_value_low' in step_data and 'custom_target_value_high' in step_data:
@@ -433,7 +464,7 @@ class zwoToFitConverter:
                     
                     low_pct = (low_watts / self.ftp_watts) * 100
                     high_pct = (high_watts / self.ftp_watts) * 100
-                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {low_watts:.0f}-{high_watts:.0f}W ({low_pct:.0f}%-{high_pct:.0f}% FTP)")
+                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_text} - {low_watts:.0f}-{high_watts:.0f}W ({low_pct:.0f}%-{high_pct:.0f}% FTP)")
                 else:
                     watts = step_data['target_value']
                     if self.use_absolute_power and watts > 1000:
@@ -442,9 +473,9 @@ class zwoToFitConverter:
                         watts = (watts / 10) * self.ftp_watts / 100
                     
                     pct = (watts / self.ftp_watts) * 100
-                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {watts:.0f}W ({pct:.0f}% FTP)")
+                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_text} - {watts:.0f}W ({pct:.0f}% FTP)")
             else:
-                print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - HR Zone {step_data['target_value']}")
+                print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_text} - HR Zone {step_data['target_value']}")
 
     def convert_zwo_to_fit(self, zwo_file_path, output_dir='./'):
         """Convert single zwo file to FIT file"""
@@ -513,7 +544,9 @@ def main():
         ftp_watts=240,  # Your actual FTP
         use_power_for_cycling=True,
         power_buffer_percent=5,  # ±5% buffer on all power targets
-        use_absolute_power=True  # Set to True for absolute watts, False for FTP percentages
+        use_absolute_power=True,  # Set to True for absolute watts, False for FTP percentages
+        warmup_manual_advance=True,  # Warmup steps wait for LAP button press
+        cooldown_manual_advance=False  # Cooldown steps use timed duration (change to True if desired)
     )
     
     # Define source and destination folders
