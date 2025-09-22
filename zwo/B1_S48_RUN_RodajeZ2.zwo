@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B1_S48_RUN_RodajeZ2</name>
+    <description>Rodaje suave 40'.</description>
+    <sportType>run</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.55" PowerHigh="0.70"/>
+        <SteadyState Duration="1800" Power="0.70"/>
+        <Cooldown Duration="300" PowerLow="0.55" PowerHigh="0.65"/>
+    </workout>
+</workout_file>

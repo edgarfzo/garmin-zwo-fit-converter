@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B1_S46_BICI_SweetSpot4x8</name>
+    <description>Sweet Spot 4x8' al 88–92% FTP.</description>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.55" PowerHigh="0.75"/>
+        <IntervalsT Repeat="4" OnDuration="480" OffDuration="180" OnPower="0.90" OffPower="0.50"/>
+        <Cooldown Duration="600" PowerLow="0.50" PowerHigh="0.60"/>
+    </workout>
+</workout_file>

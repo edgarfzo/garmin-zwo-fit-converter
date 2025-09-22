@@ -11,7 +11,17 @@ from fit_tool.profile.profile_type import Sport, Intensity, WorkoutStepDuration,
 
 
 class zwoToFitConverter:
-    def __init__(self):
+    def __init__(self, ftp_watts=250, use_power_for_cycling=True):
+        """
+        Initialize converter
+        
+        Args:
+            ftp_watts: Your FTP in watts (used to convert percentages to absolute power)
+            use_power_for_cycling: If True, use power targets for cycling workouts
+        """
+        self.ftp_watts = ftp_watts
+        self.use_power_for_cycling = use_power_for_cycling
+        
         # Mapping zwo sport types to FIT sport types
         self.sport_mapping = {
             'run': Sport.RUNNING,
@@ -54,7 +64,7 @@ class zwoToFitConverter:
         steps = []
         
         if workout_element is not None:
-            steps = self._parse_workout_steps(workout_element)
+            steps = self._parse_workout_steps(workout_element, sport_type.lower())
         
         return {
             'name': name,
@@ -63,69 +73,104 @@ class zwoToFitConverter:
             'steps': steps
         }
 
-    def _parse_workout_steps(self, workout_element):
+    def _parse_workout_steps(self, workout_element, sport='bike'):
         """Parse workout steps and expand intervals"""
         steps = []
         
         for element in workout_element:
             if element.tag == 'Warmup':
-                step = self._parse_warmup(element)
+                step = self._parse_warmup(element, sport)
                 steps.append(step)
                 
             elif element.tag == 'Cooldown':
-                step = self._parse_cooldown(element)
+                step = self._parse_cooldown(element, sport)
                 steps.append(step)
                 
             elif element.tag == 'IntervalsT':
-                interval_steps = self._parse_intervals(element)
+                interval_steps = self._parse_intervals(element, sport)
                 steps.extend(interval_steps)
                 
-            # Add other step types as needed
             elif element.tag == 'SteadyState':
-                step = self._parse_steady_state(element)
+                step = self._parse_steady_state(element, sport)
                 steps.append(step)
         
         return steps
 
-    def _parse_warmup(self, element):
+    def _should_use_power(self, sport):
+        """Determine if we should use power targets for this sport"""
+        return self.use_power_for_cycling and sport in ['bike', 'cycling']
+
+    def _parse_warmup(self, element, sport='bike'):
         """Parse warmup step"""
         duration = int(element.get('Duration', 600))  # Duration in seconds
         power_low = float(element.get('PowerLow', 0.60))
         power_high = float(element.get('PowerHigh', 0.70))
         
-        # Use average power for heart rate zone calculation
-        avg_power = (power_low + power_high) / 2
-        hr_zone = self._power_to_heart_rate_zone(avg_power)
-        
-        return {
-            'name': 'Warmup',
-            'intensity': Intensity.WARMUP,
-            'duration_type': WorkoutStepDuration.TIME,
-            'duration_value': duration * 1000,  # Convert to milliseconds for FIT
-            'target_type': WorkoutStepTarget.HEART_RATE,
-            'target_value': hr_zone
-        }
+        if self._should_use_power(sport):
+            # Use power targets for cycling
+            power_low_watts = int(power_low * self.ftp_watts)
+            power_high_watts = int(power_high * self.ftp_watts)
+            
+            return {
+                'wkt_step_name': 'Warmup',
+                'intensity': Intensity.WARMUP,
+                'duration_type': WorkoutStepDuration.TIME,
+                'duration_value': duration * 1000,  # Convert to milliseconds for FIT
+                'target_type': WorkoutStepTarget.POWER,
+                'target_value': (power_low_watts + power_high_watts) // 2,
+                'custom_target_value_low': power_low_watts,
+                'custom_target_value_high': power_high_watts
+            }
+        else:
+            # Use heart rate zones (original behavior)
+            avg_power = (power_low + power_high) / 2
+            hr_zone = self._power_to_heart_rate_zone(avg_power)
+            
+            return {
+                'wkt_step_name': 'Warmup',
+                'intensity': Intensity.WARMUP,
+                'duration_type': WorkoutStepDuration.TIME,
+                'duration_value': duration * 1000,
+                'target_type': WorkoutStepTarget.HEART_RATE,
+                'target_value': hr_zone
+            }
 
-    def _parse_cooldown(self, element):
+    def _parse_cooldown(self, element, sport='bike'):
         """Parse cooldown step"""
         duration = int(element.get('Duration', 600))  # Duration in seconds
         power_low = float(element.get('PowerLow', 0.60))
         power_high = float(element.get('PowerHigh', 0.65))
         
-        # Use average power for heart rate zone calculation
-        avg_power = (power_low + power_high) / 2
-        hr_zone = self._power_to_heart_rate_zone(avg_power)
-        
-        return {
-            'name': 'Cooldown',
-            'intensity': Intensity.COOLDOWN,
-            'duration_type': WorkoutStepDuration.TIME,
-            'duration_value': duration * 1000,  # Convert to milliseconds for FIT
-            'target_type': WorkoutStepTarget.HEART_RATE,
-            'target_value': hr_zone
-        }
+        if self._should_use_power(sport):
+            # Use power targets for cycling
+            power_low_watts = int(power_low * self.ftp_watts)
+            power_high_watts = int(power_high * self.ftp_watts)
+            
+            return {
+                'wkt_step_name': 'Cooldown',
+                'intensity': Intensity.COOLDOWN,
+                'duration_type': WorkoutStepDuration.TIME,
+                'duration_value': duration * 1000,
+                'target_type': WorkoutStepTarget.POWER,
+                'target_value': (power_low_watts + power_high_watts) // 2,
+                'custom_target_value_low': power_low_watts,
+                'custom_target_value_high': power_high_watts
+            }
+        else:
+            # Use heart rate zones
+            avg_power = (power_low + power_high) / 2
+            hr_zone = self._power_to_heart_rate_zone(avg_power)
+            
+            return {
+                'wkt_step_name': 'Cooldown',
+                'intensity': Intensity.COOLDOWN,
+                'duration_type': WorkoutStepDuration.TIME,
+                'duration_value': duration * 1000,
+                'target_type': WorkoutStepTarget.HEART_RATE,
+                'target_value': hr_zone
+            }
 
-    def _parse_intervals(self, element):
+    def _parse_intervals(self, element, sport='bike'):
         """Parse interval steps and expand into individual work/rest steps"""
         repeat = int(element.get('Repeat', 1))
         on_duration = int(element.get('OnDuration', 300))  # Duration in seconds
@@ -133,52 +178,93 @@ class zwoToFitConverter:
         on_power = float(element.get('OnPower', 0.85))
         off_power = float(element.get('OffPower', 0.65))
         
-        on_hr_zone = self._power_to_heart_rate_zone(on_power)
-        off_hr_zone = self._power_to_heart_rate_zone(off_power)
-        
         steps = []
         
         for i in range(repeat):
             # Work interval
-            work_step = {
-                'name': f'Interval {i+1} - Work',
-                'intensity': Intensity.ACTIVE,
-                'duration_type': WorkoutStepDuration.TIME,
-                'duration_value': on_duration * 1000,  # Convert to milliseconds for FIT
-                'target_type': WorkoutStepTarget.HEART_RATE,
-                'target_value': on_hr_zone
-            }
+            if self._should_use_power(sport):
+                on_power_watts = int(on_power * self.ftp_watts)
+                work_step = {
+                    'wkt_step_name': f'Interval {i+1} - Work',
+                    'intensity': Intensity.ACTIVE,
+                    'duration_type': WorkoutStepDuration.TIME,
+                    'duration_value': on_duration * 1000,
+                    'target_type': WorkoutStepTarget.POWER,
+                    'target_value': on_power_watts,
+                    'custom_target_value_low': on_power_watts,
+                    'custom_target_value_high': on_power_watts
+                }
+            else:
+                on_hr_zone = self._power_to_heart_rate_zone(on_power)
+                work_step = {
+                    'wkt_step_name': f'Interval {i+1} - Work',
+                    'intensity': Intensity.ACTIVE,
+                    'duration_type': WorkoutStepDuration.TIME,
+                    'duration_value': on_duration * 1000,
+                    'target_type': WorkoutStepTarget.HEART_RATE,
+                    'target_value': on_hr_zone
+                }
             steps.append(work_step)
             
             # Recovery interval (only add if not the last repeat)
             if i < repeat - 1:
-                recovery_step = {
-                    'name': f'Interval {i+1} - Recovery',
-                    'intensity': Intensity.REST,
-                    'duration_type': WorkoutStepDuration.TIME,
-                    'duration_value': off_duration * 1000,  # Convert to milliseconds for FIT
-                    'target_type': WorkoutStepTarget.HEART_RATE,
-                    'target_value': off_hr_zone
-                }
+                if self._should_use_power(sport):
+                    off_power_watts = int(off_power * self.ftp_watts)
+                    recovery_step = {
+                        'wkt_step_name': f'Interval {i+1} - Recovery',
+                        'intensity': Intensity.REST,
+                        'duration_type': WorkoutStepDuration.TIME,
+                        'duration_value': off_duration * 1000,
+                        'target_type': WorkoutStepTarget.POWER,
+                        'target_value': off_power_watts,
+                        'custom_target_value_low': off_power_watts,
+                        'custom_target_value_high': off_power_watts
+                    }
+                else:
+                    off_hr_zone = self._power_to_heart_rate_zone(off_power)
+                    recovery_step = {
+                        'wkt_step_name': f'Interval {i+1} - Recovery',
+                        'intensity': Intensity.REST,
+                        'duration_type': WorkoutStepDuration.TIME,
+                        'duration_value': off_duration * 1000,
+                        'target_type': WorkoutStepTarget.HEART_RATE,
+                        'target_value': off_hr_zone
+                    }
                 steps.append(recovery_step)
         
         return steps
 
-    def _parse_steady_state(self, element):
+    def _parse_steady_state(self, element, sport='bike'):
         """Parse steady state step"""
         duration = int(element.get('Duration', 1200))  # Duration in seconds
         power = float(element.get('Power', 0.75))
         
-        hr_zone = self._power_to_heart_rate_zone(power)
-        
-        return {
-            'name': 'Steady State',
-            'intensity': Intensity.ACTIVE,
-            'duration_type': WorkoutStepDuration.TIME,
-            'duration_value': duration * 1000,  # Convert to milliseconds for FIT
-            'target_type': WorkoutStepTarget.HEART_RATE,
-            'target_value': hr_zone
-        }
+        if self._should_use_power(sport):
+            # Use power targets for cycling
+            power_watts = int(power * self.ftp_watts)
+            
+            return {
+                'wkt_step_name': f'Steady State ({int(power*100)}% FTP)',
+                'intensity': Intensity.ACTIVE,
+                'duration_type': WorkoutStepDuration.TIME,
+                'duration_value': duration * 1000,
+                'target_type': WorkoutStepTarget.POWER,
+                'target_value': power_watts,
+                'custom_target_value_low': power_watts,
+                'custom_target_value_high': power_watts
+            }
+        else:
+            # Use heart rate zones
+            hr_zone = self._power_to_heart_rate_zone(power)
+            
+            return {
+                'wkt_step_name': 'Steady State',
+                'intensity': Intensity.ACTIVE,
+                'duration_type': WorkoutStepDuration.TIME,
+                'duration_value': duration * 1000,
+                'target_type': WorkoutStepTarget.HEART_RATE,
+                'target_value': hr_zone
+            }
 
     def _power_to_heart_rate_zone(self, power_percentage):
         """Convert power percentage to heart rate zone"""
@@ -202,75 +288,57 @@ class zwoToFitConverter:
         file_creator_message.hardware_version = 0
         file_creator_message.software_version = 0
 
-        # Create workout steps
+        # Create workout steps using only allowed fields
         workout_steps = []
         for i, step_data in enumerate(workout_data['steps']):
             step = WorkoutStepMessage()
             
-            # Set message index (REQUIRED COLUMN)
+            # REQUIRED: Set message index
             step.message_index = i
             
-            # Set step name if available
-            for attr_name in ['wkt_step_name', 'step_name', 'name']:
-                if hasattr(step, attr_name):
-                    setattr(step, attr_name, step_data['name'])
-                    break
+            # OPTIONAL: Set step name
+            if 'wkt_step_name' in step_data:
+                step.wkt_step_name = step_data['wkt_step_name']
             
-            # Set intensity
-            step.intensity = step_data['intensity']
-            
-            # Set duration type (REQUIRED)
+            # REQUIRED: Set duration type
             step.duration_type = step_data['duration_type']
             
-            # Set duration value (REQUIRED)
-            for attr_name in ['duration_value', 'durationValue', 'duration']:
-                if hasattr(step, attr_name):
-                    setattr(step, attr_name, step_data['duration_value'])
-                    break
+            # REQUIRED: Set duration value
+            step.duration_value = step_data['duration_value']
             
-            # Set target type and value
+            # REQUIRED: Set target type
             step.target_type = step_data['target_type']
-            step.target_value = step_data['target_value']
             
-            # Set secondary target value (REQUIRED COLUMN - usually 0)
-            step.secondary_target_value = 0
+            # OPTIONAL: Set target value
+            if 'target_value' in step_data:
+                step.target_value = step_data['target_value']
             
-            # Set weight display unit (REQUIRED COLUMN)
-            step.weight_display_unit = 0  # 0 = kilogram
+            # OPTIONAL: Set custom target range
+            if 'custom_target_value_low' in step_data:
+                step.custom_target_value_low = step_data['custom_target_value_low']
+            
+            if 'custom_target_value_high' in step_data:
+                step.custom_target_value_high = step_data['custom_target_value_high']
+            
+            # OPTIONAL: Set intensity
+            if 'intensity' in step_data:
+                step.intensity = step_data['intensity']
+            
+            # OPTIONAL: Set notes
+            if 'notes' in step_data:
+                step.notes = step_data['notes']
+            
+            # OPTIONAL: Set equipment
+            if 'equipment' in step_data:
+                step.equipment = step_data['equipment']
             
             workout_steps.append(step)
 
-        # Create workout message with all required fields
+        # Create workout message
         workout_message = WorkoutMessage()
-        
-        # Try different possible attribute names for workout name
-        workout_name = workout_data['name']
-        for attr_name in ['wkt_name', 'workout_name', 'name', 'wktName']:
-            if hasattr(workout_message, attr_name):
-                setattr(workout_message, attr_name, workout_name)
-                break
-        
-        # Try multiple possible field names for message_index
-        for attr_name in ['message_index', 'messageIndex', 'msg_index']:
-            if hasattr(workout_message, attr_name):
-                setattr(workout_message, attr_name, 0)
-                break
-        
-        # Set other required fields
+        workout_message.wkt_name = workout_data['name']
         workout_message.sport = self.sport_mapping.get(workout_data['sport'], Sport.GENERIC)
         workout_message.num_valid_steps = len(workout_steps)
-        
-        # Try to set sub_sport
-        for attr_name in ['sub_sport', 'subSport']:
-            if hasattr(workout_message, attr_name):
-                setattr(workout_message, attr_name, 0)  # 0 = generic
-                break
-        
-        # Try to set capabilities
-        for attr_name in ['capabilities']:
-            if hasattr(workout_message, attr_name):
-                setattr(workout_message, attr_name, 32)  # TCX capability
-                break
 
         # Build FIT file
         builder = FitFileBuilder(auto_define=True, min_string_size=50)
@@ -284,12 +352,21 @@ class zwoToFitConverter:
         
         print(f"FIT file created: {output_path}")
         print(f"Workout: {workout_data['name']}")
+        print(f"Sport: {workout_data['sport']}")
         print(f"Total steps: {len(workout_steps)}")
         
         # Print detailed step information
         for i, step_data in enumerate(workout_data['steps'], 1):
             duration_seconds = step_data['duration_value'] / 1000
-            print(f"  Step {i}: {step_data['name']} - {duration_seconds:.0f}s - HR Zone {step_data['target_value']}")
+            duration_minutes = duration_seconds / 60
+            
+            if step_data['target_type'] == WorkoutStepTarget.POWER:
+                if 'custom_target_value_low' in step_data and 'custom_target_value_high' in step_data:
+                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {step_data['custom_target_value_low']}-{step_data['custom_target_value_high']}W")
+                else:
+                    print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - {step_data['target_value']}W")
+            else:
+                print(f"  Step {i}: {step_data['wkt_step_name']} - {duration_minutes:.1f}min - HR Zone {step_data['target_value']}")
 
     def convert_zwo_to_fit(self, zwo_file_path, output_dir='./'):
         """Convert single zwo file to FIT file"""
@@ -353,7 +430,12 @@ class zwoToFitConverter:
 
 
 def main():
-    converter = zwoToFitConverter()
+    # Initialize converter with your FTP in watts
+    # Set your actual FTP here!
+    converter = zwoToFitConverter(
+        ftp_watts=240,  # Replace with your actual FTP
+        use_power_for_cycling=True
+    )
     
     # Define source and destination folders
     zwo_folder = './zwo'  # Folder containing .zwo files

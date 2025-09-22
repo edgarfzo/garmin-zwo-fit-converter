@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B1_S45_BICI_SweetSpot2x12</name>
+    <description>Sweet Spot 2x12' al 90–92% FTP. Objetivo: acumular carga estable para estimular FTP.</description>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.55" PowerHigh="0.75"/>
+        <SteadyState Duration="720" Power="0.91"/>
+        <SteadyState Duration="240" Power="0.50"/>
+        <SteadyState Duration="720" Power="0.91"/>
+        <Cooldown Duration="600" PowerLow="0.50" PowerHigh="0.60"/>
+    </workout>
+</workout_file>

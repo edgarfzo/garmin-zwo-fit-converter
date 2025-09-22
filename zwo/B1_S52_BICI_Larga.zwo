@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B1_S52_BICI_Larga</name>
+    <description>Larga 2h.</description>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.55" PowerHigh="0.70"/>
+        <SteadyState Duration="6600" Power="0.68"/>
+        <Cooldown Duration="600" PowerLow="0.55" PowerHigh="0.65"/>
+    </workout>
+</workout_file>

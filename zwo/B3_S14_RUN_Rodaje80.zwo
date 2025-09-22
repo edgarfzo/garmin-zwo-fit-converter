@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B3_S14_RUN_Rodaje80</name>
+    <description>Rodaje 80'.</description>
+    <sportType>run</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.60" PowerHigh="0.70"/>
+        <SteadyState Duration="4200" Power="0.70"/>
+        <Cooldown Duration="600" PowerLow="0.60" PowerHigh="0.65"/>
+    </workout>
+</workout_file>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B3_S16_RUN_Brick30</name>
+    <description>Brick run 30' a ritmo Half.</description>
+    <sportType>run</sportType>
+    <workout>
+        <SteadyState Duration="1800" Power="0.85"/>
+    </workout>
+</workout_file>

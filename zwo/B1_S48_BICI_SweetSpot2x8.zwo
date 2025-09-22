@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B1_S48_BICI_SweetSpot2x8</name>
+    <description>Semana descarga, 2x8'.</description>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.55" PowerHigh="0.75"/>
+        <IntervalsT Repeat="2" OnDuration="480" OffDuration="240" OnPower="0.90" OffPower="0.50"/>
+        <Cooldown Duration="600" PowerLow="0.50" PowerHigh="0.60"/>
+    </workout>
+</workout_file>

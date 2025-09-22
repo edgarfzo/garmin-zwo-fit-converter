@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B4_S24_RUN_Suave30</name>
+    <description>Rodaje suave 30'.</description>
+    <sportType>run</sportType>
+    <workout>
+        <SteadyState Duration="1800" Power="0.70"/>
+    </workout>
+</workout_file>

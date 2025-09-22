@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B4_S25_RUN_Taper30</name>
+    <description>30' con 4x1' Half.</description>
+    <sportType>run</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.60" PowerHigh="0.70"/>
+        <IntervalsT Repeat="4" OnDuration="60" OffDuration="120" OnPower="0.85" OffPower="0.65"/>
+        <Cooldown Duration="600" PowerLow="0.60" PowerHigh="0.65"/>
+    </workout>
+</workout_file>

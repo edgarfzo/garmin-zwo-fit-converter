@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B4_S23_RUN_Half35</name>
+    <description>Run 35' ritmo Half.</description>
+    <sportType>run</sportType>
+    <workout>
+        <SteadyState Duration="2100" Power="0.85"/>
+    </workout>
+</workout_file>

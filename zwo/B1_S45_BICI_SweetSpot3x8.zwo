@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B1_S45_BICI_SweetSpot3x8</name>
+    <description>Sweet Spot 3x8' al 88–92% FTP. Objetivo: acumular minutos efectivos en zona para mejorar el FTP.</description>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.55" PowerHigh="0.75"/>
+        <SteadyState Duration="480" Power="0.90"/>
+        <SteadyState Duration="180" Power="0.50"/>
+        <SteadyState Duration="480" Power="0.90"/>
+        <SteadyState Duration="180" Power="0.50"/>
+        <SteadyState Duration="480" Power="0.90"/>
+        <Cooldown Duration="600" PowerLow="0.50" PowerHigh="0.60"/>
+    </workout>
+</workout_file>

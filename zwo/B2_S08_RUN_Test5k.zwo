@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>B2_S08_RUN_Test5k</name>
+    <description>Test 5 km.</description>
+    <sportType>run</sportType>
+    <workout>
+        <Warmup Duration="900" PowerLow="0.60" PowerHigh="0.70"/>
+        <SteadyState Duration="1500" Power="1.10"/>
+        <Cooldown Duration="600" PowerLow="0.60" PowerHigh="0.65"/>
+    </workout>
+</workout_file>
