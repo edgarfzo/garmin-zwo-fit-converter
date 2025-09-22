@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<workout_file>
-    <name>B4_S23_RUN_Suave40</name>
-    <description>Rodaje suave 40'.</description>
-    <sportType>run</sportType>
-    <workout>
-        <SteadyState Duration="2400" Power="0.70"/>
-    </workout>
-</workout_file>

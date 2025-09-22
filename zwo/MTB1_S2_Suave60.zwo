@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>MTB1_S2_Suave60</name>
+    <description>Rodaje suave 60'</description>
+    <sportType>bike</sportType>
+    <workout>
+        <Warmup Duration="300" PowerLow="0.5" PowerHigh="0.6"/>
+        <SteadyState Duration="2400" Power="0.65"/>
+        <Cooldown Duration="300" PowerLow="0.5" PowerHigh="0.55"/>
+    </workout>
+</workout_file>

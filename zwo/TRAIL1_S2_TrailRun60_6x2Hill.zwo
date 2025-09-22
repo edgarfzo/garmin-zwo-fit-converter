@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>TRAIL1_S2_TrailRun60_6x2Hill</name>
+    <description>Trail con 6x2' subida</description>
+    <sportType>run</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.6" PowerHigh="0.7"/>
+        <IntervalsT Repeat="6" OnDuration="120" OffDuration="180" OnPower="0.9" OffPower="0.65"/>
+        <Cooldown Duration="600" PowerLow="0.6" PowerHigh="0.65"/>
+    </workout>
+</workout_file>

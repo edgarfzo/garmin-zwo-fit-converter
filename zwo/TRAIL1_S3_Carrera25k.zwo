@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+    <name>TRAIL1_S3_Carrera25k</name>
+    <description>Carrera Trail 25k +1200m</description>
+    <sportType>run</sportType>
+    <workout>
+        <Warmup Duration="600" PowerLow="0.6" PowerHigh="0.7"/>
+        <SteadyState Duration="9000" Power="0.8"/>
+        <Cooldown Duration="600" PowerLow="0.6" PowerHigh="0.65"/>
+    </workout>
+</workout_file>

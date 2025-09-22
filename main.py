@@ -11,7 +11,7 @@ from fit_tool.profile.profile_type import Sport, Intensity, WorkoutStepDuration,
 
 class zwoToFitConverter:
     def __init__(self, ftp_watts=240, use_power_for_cycling=True, power_buffer_percent=5, use_absolute_power=True, 
-                 warmup_manual_advance=True, cooldown_manual_advance=False):
+                 warmup_manual_advance=True, cooldown_manual_advance=False, force_warmup_power=None):
         """
         Initialize converter
         
@@ -22,6 +22,7 @@ class zwoToFitConverter:
             use_absolute_power: If True, use absolute watts; if False, use FTP percentages
             warmup_manual_advance: If True, warmup steps require manual lap button press to advance
             cooldown_manual_advance: If True, cooldown steps require manual lap button press to advance
+            force_warmup_power: If set (e.g., 0.5), override all warmup power values with this
         """
         self.ftp_watts = ftp_watts
         self.use_power_for_cycling = use_power_for_cycling
@@ -29,6 +30,7 @@ class zwoToFitConverter:
         self.use_absolute_power = use_absolute_power
         self.warmup_manual_advance = warmup_manual_advance
         self.cooldown_manual_advance = cooldown_manual_advance
+        self.force_warmup_power = force_warmup_power
         
         # Mapping zwo sport types to FIT sport types
         self.sport_mapping = {
@@ -37,24 +39,6 @@ class zwoToFitConverter:
             'cycling': Sport.CYCLING,
             'swim': Sport.SWIMMING,
             'other': Sport.GENERIC
-        }
-        
-        # Power zone to heart rate zone mapping (approximate)
-        self.power_to_hr_zone = {
-            0.50: 1,  # Recovery
-            0.60: 2,  # Aerobic base
-            0.65: 2,  # Aerobic base
-            0.70: 3,  # Aerobic
-            0.75: 3,  # Aerobic
-            0.80: 4,  # Threshold
-            0.85: 4,  # Threshold
-            0.90: 4,  # Threshold
-            0.95: 4,  # Threshold/VO2max
-            1.00: 5,  # VO2max
-            1.05: 5,  # VO2max
-            1.10: 5,  # VO2max
-            1.15: 5,  # Neuromuscular
-            1.20: 5   # Neuromuscular
         }
 
     def _convert_power_for_fit(self, watts):
@@ -144,6 +128,12 @@ class zwoToFitConverter:
         power_low = float(element.get('PowerLow', 0.60))
         power_high = float(element.get('PowerHigh', 0.70))
         
+        # Override warmup power if force_warmup_power is set
+        if self.force_warmup_power is not None:
+            power_low = self.force_warmup_power
+            power_high = self.force_warmup_power
+            print(f"  Warmup power overridden to {self.force_warmup_power} ({self.force_warmup_power*100:.0f}%)")
+        
         # Determine duration type based on manual advance setting
         if self.warmup_manual_advance:
             duration_type = WorkoutStepDuration.OPEN
@@ -179,9 +169,14 @@ class zwoToFitConverter:
                 'custom_target_value_high': fit_power_high
             }
         else:
-            # Use heart rate zones (original behavior)
-            avg_power = (power_low + power_high) / 2
-            hr_zone = self._power_to_heart_rate_zone(avg_power)
+            # Use heart rate zones - use the forced power value if set
+            if self.force_warmup_power is not None:
+                hr_zone = self._power_to_heart_rate_zone(self.force_warmup_power)
+                print(f"  Warmup HR zone calculated from forced power {self.force_warmup_power}: Zone {hr_zone}")
+            else:
+                avg_power = (power_low + power_high) / 2
+                hr_zone = self._power_to_heart_rate_zone(avg_power)
+                print(f"  Warmup HR zone calculated from average power {avg_power}: Zone {hr_zone}")
             
             return {
                 'wkt_step_name': step_name,
@@ -359,11 +354,24 @@ class zwoToFitConverter:
             }
 
     def _power_to_heart_rate_zone(self, power_percentage):
-        """Convert power percentage to heart rate zone"""
-        # Find the closest power percentage in our mapping
-        closest_power = min(self.power_to_hr_zone.keys(), 
-                          key=lambda x: abs(x - power_percentage))
-        return self.power_to_hr_zone[closest_power]
+        """Convert power percentage to heart rate zone for running"""
+        power_pct = power_percentage * 100  # Convert to percentage (0.5 → 50)
+        
+        print(f"    DEBUG: Converting power {power_percentage} ({power_pct}%) to HR zone")
+        
+        if power_pct <= 55:  # Easy/Recovery effort → Z1
+            zone = 1
+        elif power_pct <= 70:  # Aerobic base effort → Z2  
+            zone = 2
+        elif power_pct <= 85:  # Tempo effort → Z3
+            zone = 3
+        elif power_pct <= 95:  # Threshold effort → Z4
+            zone = 4
+        else:  # VO2max+ effort → Z5
+            zone = 5
+        
+        print(f"    DEBUG: Power {power_pct}% → Zone {zone}")
+        return zone
 
     def create_fit_workout(self, workout_data, output_path):
         """Create FIT file from workout data"""
@@ -442,6 +450,8 @@ class zwoToFitConverter:
         print(f"Power format: {'Absolute watts' if self.use_absolute_power else 'FTP percentage'}")
         print(f"Warmup manual advance: {'Enabled' if self.warmup_manual_advance else 'Disabled'}")
         print(f"Cooldown manual advance: {'Enabled' if self.cooldown_manual_advance else 'Disabled'}")
+        if self.force_warmup_power is not None:
+            print(f"Forced warmup power: {self.force_warmup_power} ({self.force_warmup_power*100:.0f}%)")
         
         # Print detailed step information
         for i, step_data in enumerate(workout_data['steps'], 1):
@@ -546,7 +556,8 @@ def main():
         power_buffer_percent=5,  # ±5% buffer on all power targets
         use_absolute_power=True,  # Set to True for absolute watts, False for FTP percentages
         warmup_manual_advance=True,  # Warmup steps wait for LAP button press
-        cooldown_manual_advance=False  # Cooldown steps use timed duration (change to True if desired)
+        cooldown_manual_advance=False,  # Cooldown steps use timed duration (change to True if desired)
+        force_warmup_power=0.5  # Force all warmups to 50% effort (Z1 recovery)
     )
     
     # Define source and destination folders
